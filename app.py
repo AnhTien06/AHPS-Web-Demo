@@ -46,6 +46,15 @@ st.markdown("""
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
+/* ===== Tab labels: HOA + đậm ===== */
+.ant-tabs-tab,
+.ant-tabs-tab-btn,
+[class*="ant-tabs-tab"] {
+    text-transform: uppercase !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.5px !important;
+}
+
 /* ===== Tiêu đề chính trang ===== */
 h1 {
     background: linear-gradient(135deg, rgba(255, 75, 75, 0.12), rgba(255, 75, 75, 0.02));
@@ -332,7 +341,6 @@ def run_prediction(model, threshold, encoders, info):
     point = add_derived_features(point)
     result = predict_hotspot(model, point, threshold)
 
-    # Xử lý linh hoạt giá trị trả về (tuple/list/dict)
     if isinstance(result, dict):
         prob = result.get("probability", result.get("prob", 0))
         pred = result.get("prediction", result.get("pred", 0))
@@ -342,7 +350,6 @@ def run_prediction(model, threshold, encoders, info):
     else:
         prob, pred, alert = 0.0, 0, "SAFE"
 
-    # Ép kiểu an toàn
     try:
         prob = float(prob)
     except Exception:
@@ -421,7 +428,7 @@ if st.session_state.active_tab == 0:
             st.session_state.location_info = None
             st.rerun()
 
-    col_info, col_btn = st.columns([2, 1])
+    col_info, col_btn = st.columns(2)
     with col_info:
         st.info(f"**Tọa độ đã chọn:** `{st.session_state.clicked_lat:.4f}, {st.session_state.clicked_lng:.4f}`")
     with col_btn:
@@ -488,7 +495,7 @@ elif st.session_state.active_tab == 1:
             st.info("Không phát hiện cơ sở hạ tầng đặc biệt trong khu vực.")
 
         st.markdown("---")
-        col_back, col_predict = st.columns([1, 1])
+        col_back, col_predict = st.columns(2)
         with col_back:
             if st.button("Quay lại chọn vị trí", use_container_width=True):
                 st.session_state.active_tab = 0
@@ -514,7 +521,7 @@ elif st.session_state.active_tab == 2:
         info = result["info"]
 
         section_title("Kết quả dự đoán điểm nóng")
-        col_gauge, col_info = st.columns([1, 1])
+        col_gauge, col_info = st.columns(2)
         with col_gauge:
             st.plotly_chart(make_gauge(result["probability"]), use_container_width=True)
         with col_info:
