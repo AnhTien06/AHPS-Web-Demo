@@ -1,21 +1,19 @@
 """AHPS Web Demo - Streamlit app for Accidents Hotspot Prediction System"""
 import os
-import pickle
 import sys
+import pickle
 from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
 import requests
 import streamlit as st
-import streamlit_antd_components as sac
 import folium
 from streamlit_folium import st_folium
 import plotly.graph_objects as go
 from dotenv import load_dotenv
 
 load_dotenv()
-
 sys.path.insert(0, '.')
 from src.predict import load_model, load_thresholds, add_derived_features, predict_hotspot
 from src.preprocessing import _group_weather
@@ -25,88 +23,128 @@ from src.osm_lookup import get_infra_features, INFRA_FEATURES
 st.set_page_config(
     page_title="AHPS - Accidents Hotspot Prediction System",
     layout="wide",
+    initial_sidebar_state="collapsed",
 )
 
 # ==================== CUSTOM CSS ====================
 st.markdown("""
 <style>
-/* ===== Tiêu đề section: HOA + đậm, nền đỏ gradient + viền trái ===== */
+.main-header {
+    background: linear-gradient(135deg, rgba(255,75,75,0.25), rgba(255,75,75,0.08));
+    padding: 24px 32px;
+    border-radius: 14px;
+    border: 1px solid rgba(255,75,75,0.3);
+    margin-bottom: 24px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+    text-align: center;
+}
+.main-header h1 {
+    color: #FFFFFF;
+    margin: 0;
+    font-size: 2rem;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+}
+.main-header p {
+    color: rgba(255,255,255,0.75);
+    margin: 8px 0 0 0;
+    font-size: 1rem;
+}
 .section-title {
-    background: linear-gradient(90deg, rgba(255, 75, 75, 0.18), rgba(255, 75, 75, 0.04));
+    background: linear-gradient(90deg, rgba(255,75,75,0.20), rgba(255,75,75,0.04));
     border-left: 4px solid #FF4B4B;
     padding: 14px 22px;
-    border-radius: 8px;
-    margin-bottom: 10px;
-    margin-top: 24px;
-    font-size: 1.2rem;
+    border-radius: 8px 8px 0 0;
+    margin: 22px 0 0 0;
+    font-size: 1.1rem;
     font-weight: 800;
     color: #FFFFFF;
     letter-spacing: 1px;
     text-transform: uppercase;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
 }
-
-/* ===== Tab labels: HOA + đậm ===== */
-.ant-tabs-tab,
-.ant-tabs-tab-btn,
-[class*="ant-tabs-tab"] {
-    text-transform: uppercase !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.5px !important;
+.section-body {
+    background: rgba(20,20,25,0.55);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-top: none;
+    border-radius: 0 0 10px 10px;
+    padding: 18px 24px;
+    margin-bottom: 18px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
 }
-
-/* ===== Tiêu đề chính trang ===== */
-h1 {
-    background: linear-gradient(135deg, rgba(255, 75, 75, 0.12), rgba(255, 75, 75, 0.02));
-    backdrop-filter: blur(12px);
-    padding: 20px 28px !important;
-    border-radius: 14px;
-    border: 1px solid rgba(255, 75, 75, 0.25);
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
-    margin-bottom: 20px !important;
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
 }
+.info-row:last-child { border-bottom: none; }
+.info-label { color: rgba(255,255,255,0.7); font-size: 0.95rem; }
+.info-value { color: #FFFFFF; font-weight: 600; font-size: 1rem; text-align: right; }
 
-/* ===== Metric card ===== */
-[data-testid="stMetric"] {
-    background: rgba(255, 255, 255, 0.05);
-    padding: 14px 18px;
+/* Coord box */
+.coord-box {
+    background: linear-gradient(135deg, rgba(255,75,75,0.12), rgba(20,20,25,0.65));
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,75,75,0.25);
     border-radius: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+    padding: 14px 22px;
+    min-height: 52px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    color: #FFFFFF;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+}
+.coord-items { display: flex; flex: 1; align-items: center; gap: 18px; }
+.coord-item { display: flex; flex-direction: column; line-height: 1.2; }
+.coord-key {
+    color: rgba(255,255,255,0.55);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.coord-val {
+    color: #FFFFFF;
+    font-weight: 700;
+    font-size: 1.05rem;
+    font-family: 'Courier New', monospace;
+}
+.coord-sep { width: 1px; height: 28px; background: rgba(255,255,255,0.15); }
+.coord-empty {
+    color: rgba(255,255,255,0.6);
+    font-style: italic;
+    justify-content: center;
 }
 
-/* ===== Alert boxes ===== */
-[data-testid="stAlert"] {
-    background: rgba(255, 255, 255, 0.05) !important;
-    backdrop-filter: blur(8px);
-    border-radius: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-/* ===== Expander ===== */
-[data-testid="stExpander"] {
-    background: rgba(255, 255, 255, 0.04);
-    backdrop-filter: blur(6px);
-    border-radius: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-/* ===== Caption ===== */
-.stCaption, [data-testid="stCaptionContainer"] {
-    color: rgba(255, 255, 255, 0.6) !important;
-}
-
-/* ===== Button ===== */
+div[data-testid="column"] { display: flex; flex-direction: column; }
 .stButton > button {
-    border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.15);
+    min-height: 52px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
     transition: all 0.2s ease;
-    font-weight: 500;
 }
-.stButton > button:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+.stButton > button:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(0,0,0,0.3); }
+[data-testid="stAlert"] {
+    background: rgba(20,20,25,0.55) !important;
+    backdrop-filter: blur(10px);
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.1);
 }
+[data-testid="stExpander"] {
+    background: rgba(20,20,25,0.4);
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.08);
+}
+.stCaption, [data-testid="stCaptionContainer"] { color: rgba(255,255,255,0.6) !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -128,24 +166,43 @@ STATE_NAME_TO_CODE = {
 }
 
 WEATHER_GROUPS = ["Clear","Cloudy","Partly Cloudy","Rain","Snow/Ice","Fog/Haze","Storm","Wind/Dust","Other"]
-WEATHER_VN = {"Clear":"Trời quang","Cloudy":"Nhiều mây","Partly Cloudy":"Có mây",
-              "Rain":"Mưa","Snow/Ice":"Tuyết/Băng","Fog/Haze":"Sương mù",
-              "Storm":"Bão","Wind/Dust":"Gió/Bụi","Other":"Khác"}
+WEATHER_VN = {
+    "Clear":"Trời quang","Cloudy":"Nhiều mây","Partly Cloudy":"Mây rải rác",
+    "Rain":"Mưa","Snow/Ice":"Tuyết / Băng","Fog/Haze":"Sương mù",
+    "Storm":"Bão","Wind/Dust":"Gió / Bụi","Other":"Khác",
+}
+WIND_DIRS_VN = {
+    "N":"Bắc","NE":"Đông Bắc","E":"Đông","SE":"Đông Nam",
+    "S":"Nam","SW":"Tây Nam","W":"Tây","NW":"Tây Bắc","CALM":"Lặng gió",
+}
+RAIN_INTENSITY_LABELS = {0:"Không mưa",1:"Mưa nhẹ",2:"Mưa vừa",3:"Mưa to"}
 
-WIND_DIRS_VN = {"N":"Bắc","NE":"Đông Bắc","E":"Đông","SE":"Đông Nam",
-                "S":"Nam","SW":"Tây Nam","W":"Tây","NW":"Tây Bắc"}
+DEFAULTS = {
+    "Temperature(F)":65.0,"Humidity(%)":70.0,"Pressure(in)":29.8,
+    "Visibility(mi)":10.0,"Wind_Speed(mph)":8.0,"WindDir":"N",
+}
 
-RAIN_INTENSITY_LABELS = {0:"Không mưa", 1:"Mưa nhẹ", 2:"Mưa vừa", 3:"Mưa to"}
-
-DEFAULTS = {"Temperature(F)":65.0, "Humidity(%)":70.0, "Pressure(in)":29.8,
-            "Visibility(mi)":10.0, "Wind_Speed(mph)":8.0, "WindDir":"N"}
-
-# ==================== HELPER: HTML SECTION ====================
+# ==================== HELPERS ====================
 def section_title(text):
-    """Tiêu đề section: HOA + đậm, nền gradient đỏ + viền trái."""
     st.markdown(f'<div class="section-title">{text}</div>', unsafe_allow_html=True)
 
-# ==================== MODEL LOADING ====================
+def info_block(rows):
+    html = '<div class="section-body">'
+    for label, value in rows:
+        html += f'<div class="info-row"><span class="info-label">{label}</span><span class="info-value">{value}</span></div>'
+    html += '</div>'
+    st.markdown(html, unsafe_allow_html=True)
+
+def render_tabs(labels, active_index, key_prefix="tabbtn"):
+    cols = st.columns(len(labels))
+    for i, (col, label) in enumerate(zip(cols, labels)):
+        is_active = (i == active_index)
+        btn_type = "primary" if is_active else "secondary"
+        with col:
+            if st.button(label.upper(), key=f"{key_prefix}_{i}", type=btn_type, use_container_width=True):
+                st.session_state.active_tab = i
+                st.rerun()
+
 @st.cache_resource
 def load_artifacts():
     tuned_path = os.path.join(MODELS_DIR, "model_xgb_tuned.pkl")
@@ -154,28 +211,26 @@ def load_artifacts():
     enc_path = os.path.join(MODELS_DIR, "encoders.pkl")
 
     if os.path.exists(tuned_path):
-        model_path, model_name = tuned_path, "XGBoost (Tuned)"
+        model_path = tuned_path
+        model_name = "xgb_tuned"
     elif os.path.exists(base_path):
-        model_path, model_name = base_path, "XGBoost (Base)"
+        model_path = base_path
+        model_name = "xgboost"
     else:
-        return None, None, None, None, None
-
-    if not os.path.exists(enc_path):
-        return None, None, None, None, None
+        raise FileNotFoundError("Không tìm thấy model trong thư mục models/")
 
     model = load_model(model_path)
     thresholds = load_thresholds(thresh_path) if os.path.exists(thresh_path) else {}
-    threshold = thresholds.get("XGBoost", 0.5)
+    threshold = thresholds.get(model_name, 0.5)
     with open(enc_path, "rb") as f:
         encoders = pickle.load(f)
     return model, threshold, encoders, model_name, model_path
 
-# ==================== HELPER FUNCTIONS ====================
 def encode_safe(encoder, value, default="Other"):
     try:
-        if value in encoder.classes_:
+        if hasattr(encoder, "classes_") and value in encoder.classes_:
             return int(encoder.transform([value])[0])
-        if default in encoder.classes_:
+        if hasattr(encoder, "classes_") and default in encoder.classes_:
             return int(encoder.transform([default])[0])
         return 0
     except Exception:
@@ -189,190 +244,232 @@ def get_encoder(encoders, *candidates):
 
 def encode_with_fallback(encoders, candidates, value, default="Other"):
     enc = get_encoder(encoders, *candidates)
-    if enc is None:
-        return 0
-    return encode_safe(enc, value, default)
+    return encode_safe(enc, value, default) if enc is not None else 0
 
 def deg_to_compass(deg):
+    if deg is None:
+        return "N"
     dirs = ["N","NE","E","SE","S","SW","W","NW"]
-    return dirs[round(deg/45) % 8]
+    ix = int((deg + 22.5) // 45) % 8
+    return dirs[ix]
 
-def rain_mm_to_intensity(rain_1h_mm):
-    rain_in = rain_1h_mm / 25.4
-    if rain_in == 0: return 0
-    if rain_in <= 0.10: return 1
-    if rain_in <= 0.30: return 2
+def rain_mm_to_intensity(mm):
+    if mm is None or mm <= 0:
+        return 0
+    if mm < 2.5:
+        return 1
+    if mm < 7.6:
+        return 2
     return 3
 
 def hour_to_is_night(hour):
-    return hour < 6 or hour >= 18
+    return 1 if (hour < 6 or hour >= 19) else 0
 
-@st.cache_data(ttl=86400)
+def hour_to_is_rush(hour):
+    return 1 if (7 <= hour <= 9) or (16 <= hour <= 19) else 0
+
 def get_state_from_coords(lat, lng):
     try:
         url = "https://nominatim.openstreetmap.org/reverse"
-        params = {"lat": lat, "lon": lng, "format": "json", "zoom": 5, "addressdetails": 1}
+        params = {"lat": lat, "lon": lng, "format": "json", "addressdetails": 1}
         headers = {"User-Agent": "AHPS-Demo/1.0"}
-        resp = requests.get(url, params=params, headers=headers, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
-        if data.get("address", {}).get("country_code") != "us":
-            return None
-        state_name = data.get("address", {}).get("state")
-        return STATE_NAME_TO_CODE.get(state_name)
+        r = requests.get(url, params=params, headers=headers, timeout=8)
+        if r.status_code == 200:
+            data = r.json()
+            addr = data.get("address", {})
+            country_code = addr.get("country_code", "")
+            if country_code.lower() != "us":
+                return None
+            state_name = addr.get("state", "")
+            return STATE_NAME_TO_CODE.get(state_name)
     except Exception:
         return None
+    return None
 
 def fetch_openweather(lat, lng, api_key):
-    url = "https://api.openweathermap.org/data/2.5/weather"
-    params = {"lat": lat, "lon": lng, "appid": api_key, "units": "imperial"}
-    resp = requests.get(url, params=params, timeout=10)
-    resp.raise_for_status()
-    return resp.json()
+    if not api_key:
+        return None
+    try:
+        url = "https://api.openweathermap.org/data/2.5/weather"
+        params = {"lat": lat, "lon": lng, "appid": api_key, "units": "imperial"}
+        r = requests.get(url, params=params, timeout=8)
+        if r.status_code == 200:
+            return r.json()
+    except Exception:
+        return None
+    return None
 
-def get_local_datetime(lat, lng, timezone_offset_sec):
-    utc_now = datetime.utcnow()
-    return utc_now + timedelta(seconds=timezone_offset_sec)
+def get_local_datetime(lat, lng, utc_offset_sec=0):
+    return datetime.utcnow() + timedelta(seconds=utc_offset_sec)
 
-def get_alert_vn(alert_level):
-    return {"HIGH RISK":"NGUY HIỂM CAO","CAUTION":"CẢNH BÁO","SAFE":"AN TOÀN"}.get(alert_level, alert_level)
+def get_alert_vn(level):
+    return {
+        "HIGH RISK": "⚠️ NGUY HIỂM CAO",
+        "CAUTION": "⚡ CẦN THẬN TRỌNG",
+        "SAFE": "✅ AN TOÀN",
+    }.get(level, level)
 
-def get_alert_color(alert_level):
-    return {"HIGH RISK":"red","CAUTION":"orange","SAFE":"green"}.get(alert_level, "blue")
+def get_alert_color(level):
+    return {"HIGH RISK":"red","CAUTION":"orange","SAFE":"green"}.get(level, "blue")
 
 def make_gauge(probability):
     pct = float(probability) * 100
-    if pct >= 70: bar_color = "#E74C3C"
-    elif pct >= 40: bar_color = "#F39C12"
-    else: bar_color = "#27AE60"
+    if pct >= 70:
+        color = "#FF4B4B"
+    elif pct >= 40:
+        color = "#FFA500"
+    else:
+        color = "#4CAF50"
     fig = go.Figure(go.Indicator(
         mode="gauge+number",
         value=pct,
-        number={"suffix":"%","font":{"size":56,"color":"white","family":"Arial Black"},"valueformat":".1f"},
-        domain={"x":[0,1],"y":[0,1]},
-        gauge={"axis":{"range":[0,100],"tickwidth":1,"tickcolor":"lightgray",
-                       "tickfont":{"size":14,"color":"lightgray"},
-                       "tickmode":"array","tickvals":[0,20,40,60,80,100]},
-               "bar":{"color":bar_color,"thickness":0.7},
-               "bgcolor":"rgba(0,0,0,0)","borderwidth":2,
-               "bordercolor":"rgba(255,255,255,0.2)",
-               "steps":[{"range":[0,40],"color":"rgba(39,174,96,0.25)"},
-                        {"range":[40,70],"color":"rgba(243,156,18,0.25)"},
-                        {"range":[70,100],"color":"rgba(231,76,60,0.25)"}]}))
-    fig.update_layout(height=320, margin=dict(l=30,r=30,t=40,b=20),
-                      paper_bgcolor="rgba(0,0,0,0)", font={"color":"white","family":"Arial"})
+        number={"suffix": "%", "font": {"size": 36, "color": "white"}},
+        gauge={
+            "axis": {"range": [0, 100], "tickcolor": "white"},
+            "bar": {"color": color, "thickness": 0.3},
+            "bgcolor": "rgba(0,0,0,0)",
+            "steps": [
+                {"range": [0, 40], "color": "rgba(76,175,80,0.25)"},
+                {"range": [40, 70], "color": "rgba(255,165,0,0.25)"},
+                {"range": [70, 100], "color": "rgba(255,75,75,0.25)"},
+            ],
+        },
+    ))
+    fig.update_layout(
+        height=280, margin=dict(l=20, r=20, t=20, b=20),
+        paper_bgcolor="rgba(0,0,0,0)",
+        font={"color": "white"},
+    )
     return fig
 
-# ==================== AUTO-FETCH LOCATION INFO ====================
 def fetch_all_location_info(lat, lng):
-    api_key = st.secrets.get("OPENWEATHER_API_KEY", os.getenv("OPENWEATHER_API_KEY", "")).strip()
     info = {"lat": lat, "lng": lng}
-    info["state"] = get_state_from_coords(lat, lng) or "CA"
 
-    if api_key:
-        try:
-            data = fetch_openweather(lat, lng, api_key)
-            info["temperature"] = data["main"]["temp"]
-            info["humidity"] = data["main"]["humidity"]
-            info["pressure"] = data["main"]["pressure"] * 0.02953
-            info["visibility"] = data.get("visibility", 16093) / 1609.34
-            info["wind_speed"] = data["wind"]["speed"]
-            info["wind_dir"] = deg_to_compass(data["wind"].get("deg", 0))
-            info["weather_desc"] = data["weather"][0]["description"]
-            wg = _group_weather(data["weather"][0]["description"])
-            info["weather_group"] = wg if wg in WEATHER_GROUPS else "Other"
-            rain_mm = data.get("rain", {}).get("1h", 0.0)
-            info["rain_intensity"] = rain_mm_to_intensity(rain_mm)
-            info["local_dt"] = get_local_datetime(lat, lng, data.get("timezone", 0))
-            info["weather_ok"] = True
-        except Exception as e:
-            info["weather_ok"] = False
-            info["weather_error"] = str(e)
+    state = get_state_from_coords(lat, lng)
+    if state is None:
+        return None, "Vị trí không thuộc Hoa Kỳ. Vui lòng chọn vị trí trong nước Mỹ."
+    info["state"] = state
+
+    api_key = ""
+    try:
+        api_key = st.secrets.get("OPENWEATHER_API_KEY", "")
+    except Exception:
+        api_key = os.getenv("OPENWEATHER_API_KEY", "")
+
+    weather = fetch_openweather(lat, lng, api_key)
+    if weather:
+        info["temperature"] = weather["main"].get("temp", DEFAULTS["Temperature(F)"])
+        info["humidity"] = weather["main"].get("humidity", DEFAULTS["Humidity(%)"])
+        pressure_hpa = weather["main"].get("pressure", 1013.25)
+        info["pressure"] = pressure_hpa * 0.02953
+        info["visibility"] = weather.get("visibility", 16093) / 1609.34
+        info["wind_speed"] = weather.get("wind", {}).get("speed", DEFAULTS["Wind_Speed(mph)"])
+        info["wind_deg"] = weather.get("wind", {}).get("deg", 0)
+        info["wind_dir"] = deg_to_compass(info["wind_deg"])
+        weather_main = weather["weather"][0].get("main", "Clear") if weather.get("weather") else "Clear"
+        weather_desc = weather["weather"][0].get("description", "") if weather.get("weather") else ""
+        info["weather_main"] = weather_main
+        info["weather_desc"] = weather_desc
+        info["weather_group"] = _group_weather(weather_main)
+        rain_mm = weather.get("rain", {}).get("1h", 0)
+        info["rain_intensity"] = rain_mm_to_intensity(rain_mm)
+        info["utc_offset"] = weather.get("timezone", 0)
     else:
-        info["weather_ok"] = False
-        info["weather_error"] = "Chưa cấu hình API key OpenWeatherMap"
+        info.update({
+            "temperature": DEFAULTS["Temperature(F)"],
+            "humidity": DEFAULTS["Humidity(%)"],
+            "pressure": DEFAULTS["Pressure(in)"],
+            "visibility": DEFAULTS["Visibility(mi)"],
+            "wind_speed": DEFAULTS["Wind_Speed(mph)"],
+            "wind_deg": 0,
+            "wind_dir": DEFAULTS["WindDir"],
+            "weather_main": "Clear",
+            "weather_desc": "Trời quang",
+            "weather_group": "Clear",
+            "rain_intensity": 0,
+            "utc_offset": 0,
+        })
 
-    if not info.get("weather_ok"):
-        info["temperature"] = DEFAULTS["Temperature(F)"]
-        info["humidity"] = DEFAULTS["Humidity(%)"]
-        info["pressure"] = DEFAULTS["Pressure(in)"]
-        info["visibility"] = DEFAULTS["Visibility(mi)"]
-        info["wind_speed"] = DEFAULTS["Wind_Speed(mph)"]
-        info["wind_dir"] = DEFAULTS["WindDir"]
-        info["weather_desc"] = "N/A"
-        info["weather_group"] = "Clear"
-        info["rain_intensity"] = 0
-        info["local_dt"] = datetime.now()
+    info["local_dt"] = get_local_datetime(lat, lng, info["utc_offset"])
 
     try:
-        infra_db = os.path.join(MODELS_DIR, "infra_lookup")
-        info["infra"] = get_infra_features(lat, lng, db_path=infra_db)
+        infra_lookup_dir = os.path.join(MODELS_DIR, "infra_lookup")
+        if os.path.exists(infra_lookup_dir):
+            infra = get_infra_features(lat, lng, infra_lookup_dir)
+        else:
+            infra = {k: 0 for k in INFRA_FEATURES}
     except Exception:
-        info["infra"] = {f: 0 for f in INFRA_FEATURES}
+        infra = {k: 0 for k in INFRA_FEATURES}
+    info["infra"] = infra
 
-    return info
+    return info, None
 
-# ==================== PREDICTION ====================
 def run_prediction(model, threshold, encoders, info):
     dt = info["local_dt"]
+    hour = dt.hour
+    month = dt.month
+    is_raining = 1 if info["rain_intensity"] > 0 else 0
+    is_rush = hour_to_is_rush(hour)
+    is_night = hour_to_is_night(hour)
+
+    # Build dict đúng theo FEATURE_COLS
     point = {
-        "Start_Lat": info["lat"], "Start_Lng": info["lng"],
-        "Temperature(F)": info["temperature"], "Humidity(%)": info["humidity"],
-        "Pressure(in)": info["pressure"], "Visibility(mi)": info["visibility"],
+        # Thời gian
+        "hour": hour,
+        "month": month,
+        "day_of_week": dt.weekday(),
+        "is_rush_hour": is_rush,
+        "is_night": is_night,
+        # Khí tượng
+        "Temperature(F)": info["temperature"],
+        "Humidity(%)": info["humidity"],
+        "Pressure(in)": info["pressure"],
+        "Visibility(mi)": info["visibility"],
         "Wind_Speed(mph)": info["wind_speed"],
-        "hour": dt.hour, "month": dt.month, "day_of_week": dt.weekday(),
-        "is_rush_hour": int(dt.hour in [7,8,9,16,17,18]),
-        "is_night": int(hour_to_is_night(dt.hour)),
-        "is_raining": int(info["rain_intensity"] > 0),
+        "is_raining": is_raining,
+        # Cơ sở hạ tầng
+        "Amenity": info["infra"].get("Amenity", 0),
+        "Crossing": info["infra"].get("Crossing", 0),
+        "Give_Way": info["infra"].get("Give_Way", 0),
+        "Junction": info["infra"].get("Junction", 0),
+        "No_Exit": info["infra"].get("No_Exit", 0),
+        "Railway": info["infra"].get("Railway", 0),
+        "Station": info["infra"].get("Station", 0),
+        "Stop": info["infra"].get("Stop", 0),
+        "Traffic_Signal": info["infra"].get("Traffic_Signal", 0),
+        # Encoders
+        "Weather_enc": encode_with_fallback(encoders, ["weather"], info["weather_group"]),
+        "WindDir_enc": encode_with_fallback(encoders, ["wind"], info["wind_dir"]),
+        "State_enc": encode_with_fallback(encoders, ["state"], info["state"]),
+        "County_enc": encode_with_fallback(encoders, ["county"], "Other"),
+        # Cường độ mưa
         "rain_intensity": info["rain_intensity"],
-        "Weather_enc": encode_with_fallback(
-            encoders, ["weather", "Weather", "Weather_Condition"],
-            info["weather_group"]),
-        "WindDir_enc": encode_with_fallback(
-            encoders, ["wind", "WindDir", "Wind_Direction"],
-            info["wind_dir"]),
-        "State_enc": encode_with_fallback(
-            encoders, ["state", "State"], info["state"]),
-        "County_enc": encode_with_fallback(
-            encoders, ["county", "County"], "Other"),
     }
-    for f in INFRA_FEATURES:
-        point[f] = info["infra"].get(f, 0)
+
+    # add_derived_features sẽ tự tính hour_sin, hour_cos, month_sin, month_cos,
+    # rush_rain, night_vis, rain_wind
     point = add_derived_features(point)
-    result = predict_hotspot(model, point, threshold)
+    result_dict = predict_hotspot(model, point, threshold)
 
-    if isinstance(result, dict):
-        prob = result.get("probability", result.get("prob", 0))
-        pred = result.get("prediction", result.get("pred", 0))
-        alert = result.get("alert_level", result.get("alert", "SAFE"))
-    elif isinstance(result, (tuple, list)) and len(result) >= 3:
-        prob, pred, alert = result[0], result[1], result[2]
-    else:
-        prob, pred, alert = 0.0, 0, "SAFE"
-
-    try:
-        prob = float(prob)
-    except Exception:
-        prob = 0.0
-    try:
-        pred = int(pred)
-    except Exception:
-        pred = 0
-    alert = str(alert)
-
-    return {"probability": prob, "prediction": pred, "alert_level": alert,
-            "point": point, "info": info}
+    return {
+        "probability": float(result_dict["probability"]),
+        "prediction": int(result_dict["prediction"]),
+        "alert_level": str(result_dict["alert_level"]),
+        "point": point,
+        "info": info,
+    }
 
 # ==================== LOAD MODEL ====================
-model, threshold, encoders, model_name, model_path = load_artifacts()
-if model is None:
-    st.error("Không tìm thấy file model. Vui lòng chạy training trước.")
+try:
+    model, threshold, encoders, model_name, model_path = load_artifacts()
+except Exception as e:
+    st.error(f"Lỗi tải model: {e}")
     st.stop()
 
 # ==================== SESSION STATE ====================
 defaults_state = {
-    "clicked_lat": 34.0522,
-    "clicked_lng": -118.2437,
+    "selected_lat": None,
+    "selected_lng": None,
     "location_confirmed": False,
     "location_info": None,
     "last_result": None,
@@ -383,101 +480,103 @@ for k, v in defaults_state.items():
         st.session_state[k] = v
 
 # ==================== HEADER ====================
-st.title("AHPS - Hệ thống dự đoán điểm nóng tai nạn giao thông")
-st.caption("Đồ án CS313 | Dataset: US Accidents (Kaggle) | Model: XGBoost")
+st.markdown("""
+<div class="main-header">
+    <h1>AHPS - Hệ thống dự đoán điểm nóng tai nạn</h1>
+    <p>Accidents Hotspot Prediction System | CS313 Project</p>
+</div>
+""", unsafe_allow_html=True)
 
 # ==================== TABS ====================
-current_tab = sac.tabs(
-    items=[
-        sac.TabsItem(label="1. Chọn vị trí"),
-        sac.TabsItem(label="2. Thông tin chi tiết"),
-        sac.TabsItem(label="3. Kết quả dự đoán"),
-    ],
-    index=st.session_state.active_tab,
-    align="center",
-    size="lg",
-    color="red",
-    use_container_width=True,
-    return_index=True,
-    key="tab_control",
-)
-
-if current_tab != st.session_state.active_tab:
-    st.session_state.active_tab = current_tab
+TAB_LABELS = ["1. Chọn vị trí", "2. Thông tin chi tiết", "3. Kết quả dự đoán"]
+render_tabs(TAB_LABELS, st.session_state.active_tab)
+st.markdown("")
 
 # -------------------- TAB 1: CHỌN VỊ TRÍ --------------------
 if st.session_state.active_tab == 0:
-    section_title("Chọn vị trí cần dự đoán trên bản đồ nước Mỹ")
-    st.markdown("Nhấp vào vị trí bất kỳ trên bản đồ, sau đó bấm **Xác nhận vị trí** để tải toàn bộ thông tin.")
-
-    m = folium.Map(location=[39.8283, -98.5795], zoom_start=4)
-    folium.Marker(
-        [st.session_state.clicked_lat, st.session_state.clicked_lng],
-        tooltip="Vị trí đã chọn",
-        icon=folium.Icon(color="blue", icon="info-sign"),
-    ).add_to(m)
-    map_data = st_folium(m, height=500, width=None, returned_objects=["last_clicked"])
+    section_title("Chọn vị trí trên bản đồ Hoa Kỳ")
+    st.markdown('<div class="section-body">', unsafe_allow_html=True)
+    st.write("Nhấp chuột vào bản đồ để chọn vị trí cần dự đoán.")
+    m = folium.Map(location=[39.5, -98.35], zoom_start=4, tiles="OpenStreetMap")
+    if st.session_state.selected_lat is not None:
+        folium.Marker(
+            [st.session_state.selected_lat, st.session_state.selected_lng],
+            tooltip="Vị trí đã chọn",
+            icon=folium.Icon(color="red", icon="map-marker"),
+        ).add_to(m)
+    map_data = st_folium(m, height=450, width=None, key="select_map")
+    st.markdown('</div>', unsafe_allow_html=True)
 
     if map_data and map_data.get("last_clicked"):
-        new_lat = map_data["last_clicked"]["lat"]
-        new_lng = map_data["last_clicked"]["lng"]
-        if (new_lat, new_lng) != (st.session_state.clicked_lat, st.session_state.clicked_lng):
-            st.session_state.clicked_lat = new_lat
-            st.session_state.clicked_lng = new_lng
-            st.session_state.location_confirmed = False
-            st.session_state.location_info = None
-            st.rerun()
+        st.session_state.selected_lat = map_data["last_clicked"]["lat"]
+        st.session_state.selected_lng = map_data["last_clicked"]["lng"]
 
-    col_info, col_btn = st.columns(2)
-    with col_info:
-        st.info(f"**Tọa độ đã chọn:** `{st.session_state.clicked_lat:.4f}, {st.session_state.clicked_lng:.4f}`")
+    section_title("Xác nhận vị trí")
+    col_coord, col_btn = st.columns(2)
+    with col_coord:
+        if st.session_state.selected_lat is not None:
+            coord_html = (
+                '<div class="coord-box">'
+                '<div class="coord-items">'
+                f'<div class="coord-item"><span class="coord-key">Vĩ độ</span><span class="coord-val">{st.session_state.selected_lat:.4f}</span></div>'
+                '<div class="coord-sep"></div>'
+                f'<div class="coord-item"><span class="coord-key">Kinh độ</span><span class="coord-val">{st.session_state.selected_lng:.4f}</span></div>'
+                '</div>'
+                '</div>'
+            )
+        else:
+            coord_html = '<div class="coord-box coord-empty">Chưa chọn vị trí. Hãy nhấp chuột lên bản đồ.</div>'
+        st.markdown(coord_html, unsafe_allow_html=True)
     with col_btn:
-        if st.button("Xác nhận vị trí", type="primary", use_container_width=True):
-            with st.spinner("Đang tải thông tin từ vị trí..."):
-                info = fetch_all_location_info(
-                    st.session_state.clicked_lat,
-                    st.session_state.clicked_lng,
+        if st.button("Xác nhận vị trí", type="primary", use_container_width=True, key="confirm_btn",
+                     disabled=(st.session_state.selected_lat is None)):
+            with st.spinner("Đang lấy thông tin vị trí..."):
+                info, err = fetch_all_location_info(
+                    st.session_state.selected_lat, st.session_state.selected_lng
                 )
-                st.session_state.location_info = info
-                st.session_state.location_confirmed = True
-                st.session_state.active_tab = 1
-            st.rerun()
+                if err:
+                    st.error(err)
+                else:
+                    st.session_state.location_info = info
+                    st.session_state.location_confirmed = True
+                    st.session_state.active_tab = 1
+                    st.rerun()
 
 # -------------------- TAB 2: THÔNG TIN CHI TIẾT --------------------
 elif st.session_state.active_tab == 1:
     if not st.session_state.location_confirmed or st.session_state.location_info is None:
         section_title("Thông tin chi tiết")
-        st.warning("Vui lòng quay lại tab '1. Chọn vị trí' và bấm **Xác nhận vị trí** trước.")
-        if st.button("Quay lại tab 1"):
+        st.warning("Vui lòng chọn và xác nhận vị trí ở tab 1 trước.")
+        if st.button("Về tab 1", key="back_to_1"):
             st.session_state.active_tab = 0
             st.rerun()
     else:
         info = st.session_state.location_info
-        if not info.get("weather_ok"):
-            st.warning(f"API thời tiết lỗi: {info.get('weather_error', 'unknown')}. Đang dùng giá trị mặc định.")
 
         section_title("Vị trí và thời gian")
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Vĩ độ (Lat)", f"{info['lat']:.4f}")
-        c2.metric("Kinh độ (Lng)", f"{info['lng']:.4f}")
-        c3.metric("Bang", info["state"])
-        c4.metric("Thời gian địa phương", info["local_dt"].strftime("%H:%M %d/%m/%Y"))
+        info_block([
+            ("Vĩ độ (Lat)", f"{info['lat']:.4f}"),
+            ("Kinh độ (Lng)", f"{info['lng']:.4f}"),
+            ("Bang", info["state"]),
+            ("Thời gian địa phương", info["local_dt"].strftime("%H:%M %d/%m/%Y")),
+        ])
 
         section_title("Tình trạng thời tiết")
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Mô tả", info.get("weather_desc", "N/A"))
-        c2.metric("Nhóm thời tiết", WEATHER_VN.get(info["weather_group"], info["weather_group"]))
-        c3.metric("Cường độ mưa", RAIN_INTENSITY_LABELS[info["rain_intensity"]])
+        info_block([
+            ("Mô tả", info.get("weather_desc", "N/A")),
+            ("Nhóm thời tiết", WEATHER_VN.get(info["weather_group"], info["weather_group"])),
+            ("Cường độ mưa", RAIN_INTENSITY_LABELS[info["rain_intensity"]]),
+        ])
 
         section_title("Thông số khí tượng chi tiết")
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Nhiệt độ", f"{info['temperature']:.1f} °F")
-        c2.metric("Độ ẩm", f"{info['humidity']:.0f} %")
-        c3.metric("Áp suất", f"{info['pressure']:.2f} inHg")
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Tầm nhìn", f"{info['visibility']:.1f} mi")
-        c2.metric("Tốc độ gió", f"{info['wind_speed']:.1f} mph")
-        c3.metric("Hướng gió", WIND_DIRS_VN.get(info["wind_dir"], info["wind_dir"]))
+        info_block([
+            ("Nhiệt độ", f"{info['temperature']:.1f} °F"),
+            ("Độ ẩm", f"{info['humidity']:.0f} %"),
+            ("Áp suất", f"{info['pressure']:.2f} inHg"),
+            ("Tầm nhìn", f"{info['visibility']:.1f} mi"),
+            ("Tốc độ gió", f"{info['wind_speed']:.1f} mph"),
+            ("Hướng gió", WIND_DIRS_VN.get(info["wind_dir"], info["wind_dir"])),
+        ])
 
         section_title("Cơ sở hạ tầng xung quanh (OpenStreetMap)")
         infra_vn = {
@@ -486,27 +585,29 @@ elif st.session_state.active_tab == 1:
             "No_Exit":"Đường cụt","Railway":"Đường sắt",
             "Station":"Trạm/Ga","Stop":"Biển Stop","Traffic_Signal":"Đèn giao thông",
         }
-        infra_present = [infra_vn.get(k, k) for k, v in info["infra"].items() if v == 1]
-        if infra_present:
-            cols = st.columns(3)
-            for i, item in enumerate(infra_present):
-                cols[i % 3].success(f"Có {item}")
-        else:
-            st.info("Không phát hiện cơ sở hạ tầng đặc biệt trong khu vực.")
+        infra_rows = []
+        for k, v in info["infra"].items():
+            infra_rows.append((infra_vn.get(k, k), "Có" if v == 1 else "—"))
+        info_block(infra_rows)
 
         st.markdown("---")
         col_back, col_predict = st.columns(2)
         with col_back:
-            if st.button("Quay lại chọn vị trí", use_container_width=True):
+            if st.button("Quay lại chọn vị trí", use_container_width=True, key="back_btn"):
                 st.session_state.active_tab = 0
                 st.rerun()
         with col_predict:
-            if st.button("DỰ ĐOÁN ĐIỂM NÓNG", type="primary", use_container_width=True):
+            if st.button("Dự đoán điểm nóng", type="primary", use_container_width=True, key="predict_btn"):
                 with st.spinner("Đang dự đoán..."):
-                    result = run_prediction(model, threshold, encoders, info)
-                    st.session_state.last_result = result
-                    st.session_state.active_tab = 2
-                st.rerun()
+                    try:
+                        result = run_prediction(model, threshold, encoders, info)
+                        st.session_state.last_result = result
+                        st.session_state.active_tab = 2
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Lỗi khi dự đoán: {e}")
+                        import traceback
+                        st.code(traceback.format_exc())
 
 # -------------------- TAB 3: KẾT QUẢ DỰ ĐOÁN --------------------
 elif st.session_state.active_tab == 2:
@@ -514,35 +615,35 @@ elif st.session_state.active_tab == 2:
     if result is None:
         section_title("Kết quả dự đoán")
         st.warning("Chưa có kết quả. Vui lòng hoàn tất tab 1 và 2 trước.")
-        if st.button("Về tab 1"):
+        if st.button("Về tab 1", key="to_tab1"):
             st.session_state.active_tab = 0
             st.rerun()
     else:
         info = result["info"]
+        alert_vn = get_alert_vn(result["alert_level"])
 
         section_title("Kết quả dự đoán điểm nóng")
         col_gauge, col_info = st.columns(2)
         with col_gauge:
             st.plotly_chart(make_gauge(result["probability"]), use_container_width=True)
         with col_info:
-            alert_vn = get_alert_vn(result["alert_level"])
             if result["alert_level"] == "HIGH RISK":
                 st.error(f"### {alert_vn}")
             elif result["alert_level"] == "CAUTION":
                 st.warning(f"### {alert_vn}")
             else:
                 st.success(f"### {alert_vn}")
-            c1, c2 = st.columns(2)
-            c1.metric("Xác suất điểm nóng", f"{result['probability']:.2%}")
-            c2.metric("Phân loại", "ĐIỂM NÓNG" if result["prediction"] == 1 else "AN TOÀN")
-            st.markdown(f"""
-            **Vị trí:** ({info['lat']:.4f}, {info['lng']:.4f})  
-            **Bang:** {info['state']}  
-            **Thời gian:** {info['local_dt'].strftime('%H:%M %d/%m/%Y')}  
-            **Thời tiết:** {WEATHER_VN.get(info['weather_group'], info['weather_group'])}
-            """)
+            info_block([
+                ("Xác suất điểm nóng", f"{result['probability']:.2%}"),
+                ("Phân loại", "ĐIỂM NÓNG" if result["prediction"] == 1 else "AN TOÀN"),
+                ("Vị trí", f"({info['lat']:.4f}, {info['lng']:.4f})"),
+                ("Bang", info["state"]),
+                ("Thời gian", info["local_dt"].strftime('%H:%M %d/%m/%Y')),
+                ("Thời tiết", WEATHER_VN.get(info["weather_group"], info["weather_group"])),
+            ])
 
         section_title("Vị trí dự đoán trên bản đồ")
+        st.markdown('<div class="section-body">', unsafe_allow_html=True)
         result_map = folium.Map(location=[info["lat"], info["lng"]], zoom_start=12)
         folium.CircleMarker(
             [info["lat"], info["lng"]], radius=20,
@@ -555,6 +656,7 @@ elif st.session_state.active_tab == 2:
             icon=folium.Icon(color="blue", icon="info-sign"),
         ).add_to(result_map)
         st_folium(result_map, height=400, width=None)
+        st.markdown('</div>', unsafe_allow_html=True)
 
         with st.expander("Xem chi tiết đặc trưng đã dùng để dự đoán"):
             feat_df = pd.DataFrame([result["point"]]).T.reset_index()
@@ -562,7 +664,7 @@ elif st.session_state.active_tab == 2:
             st.dataframe(feat_df, use_container_width=True, height=400)
 
         st.markdown("---")
-        if st.button("Dự đoán vị trí mới", use_container_width=True):
+        if st.button("Dự đoán vị trí mới", use_container_width=True, key="new_predict"):
             st.session_state.location_confirmed = False
             st.session_state.location_info = None
             st.session_state.last_result = None
