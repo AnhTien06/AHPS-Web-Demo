@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+*.egg-info/
+
+# Data files (quá lớn, không push lên GitHub)
+data/
+*.csv
+
+# Model files lớn (chỉ giữ XGBoost + thresholds + encoders)
+models/model_random_forest.pkl
+models/model_lightgbm.pkl
+models/model_logistic_regression.pkl
+models/model_lgb_tuned.pkl
+
+# Cache
+cache/
+*.cache
+
+# Environment variables (chứa API key, KHÔNG được push)
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Streamlit secrets (KHÔNG push API key)
+.streamlit/secrets.toml
